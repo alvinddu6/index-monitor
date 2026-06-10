@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>指数加仓提醒</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --border: #2a2d37;
+    --text: #e1e4ea; --text2: #8b8fa3; --red: #f43f5e;
+    --green: #22c55e; --gold: #f59e0b; --blue: #3b82f6; --purple: #a855f7;
+    --radius: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px;
+  }
+  .container { max-width: 720px; margin:0 auto; }
+  .header { text-align: center; padding: 24px 0 16px; }
+  .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+  .header .time { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .controls { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; }
+  .btn {
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text); padding: 10px 20px; border-radius: 8px;
+    font-size: 14px; cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+  .btn.primary:hover { opacity: 0.9; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid var(--border); border-top-color: var(--blue);
+    border-radius: 50%; animation: spin 0.6s linear infinite;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px; margin-bottom: 14px;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .card-header .name { font-size: 15px; font-weight: 600; }
+  .market-badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+  .badge-a { background: rgba(59,130,246,.15); color: var(--blue); }
+  .badge-us { background: rgba(168,85,247,.15); color: var(--purple); }
+  .badge-gold { background: rgba(245,158,11,.15); color: var(--gold); }
+  .metric-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.03); }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-label { color: var(--text2); }
+  .metric-value { font-weight: 500; font-variant-numeric: tabular-nums; }
+  .metric-value.down { color: var(--red); }
+  .metric-value.up { color: var(--green); }
+  .dd-bar-wrap { margin-top: 10px; height: 6px; background: rgba(255,255,255,.06); border-radius: 3px; overflow: hidden; }
+  .dd-bar { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .dd-bar-cold { background: var(--green); }
+  .dd-bar-warm { background: var(--gold); }
+  .dd-bar-hot  { background: var(--red); }
+  .threshold-checks { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .th-check { font-size: 11px; padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border); color: var(--text2); }
+  .th-check.hit { border-color: var(--red); color: var(--red); background: rgba(244,63,94,.08); }
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .summary-table th { text-align: left; color: var(--text2); font-weight: 500; padding: 8px 6px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary-table td { padding: 10px 6px; border-bottom: 1px solid rgba(255,255,255,.03); }
+  .summary-table .verdict { font-weight: 600; font-size: 12px; }
+  .suggestion { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.03); }
+  .suggestion:last-child { border-bottom: none; }
+  .suggestion .title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .suggestion .detail { font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .big-summary { text-align: center; padding: 16px 0; font-size: 16px; font-weight: 700; letter-spacing: -0.2px; }
+  .big-summary.safe { color: var(--green); }
+  .big-summary.alert { color: var(--red); }
+  .error-card { border-color: rgba(244,63,94,.3); background: rgba(244,63,94,.05); }
+  .section-title { font-size: 14px; font-weight: 600; color: var(--purple); margin: 20px 0 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>指数加仓提醒</h1>
+    <div class="time" id="headerTime"></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="btnRefresh" onclick="refreshAll()">
+      <span id="btnIcon">加载中...</span> <span id="btnText"></span>
+    </button>
+  </div>
+  <div id="section1"></div>
+  <div id="section2"></div>
+  <div id="section3"></div>
+</div>
+
+<script>
+// ============================================================
+// Config - 数据源定义
+// ============================================================
+const PROXY = "/api/proxy?url=";
+
+const INDICES = [
+  // --- 沪深300 ---
+  {
+    name: "沪深300", code: "000300", market: "a_share",
+    histUrl: "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=sh000300&scale=240&ma=no&datalen=200",
+    rtUrl: "https://hq.sinajs.cn/list=s_sh000300",
+    rtRef: "https://finance.sina.com.cn",
+    thresholds: { "轻度补仓": 10, "中度补仓": 20, "深度补仓": 30 },
+    parseHist: (data) => data.map(d => ({ date: d.day, open: +d.open, high: +d.high, low: +d.low, close: +d.close })),
+    parseRt: function(text) { var m=text.match(/="(.+)"/); return m ? +m[1].split(",")[1] : null; },
+  },
+  // --- 纳斯达克100 ---
+  {
+    name: "纳斯达克100", code: "NDX", market: "us",
+    histUrl: "https://stock.finance.sina.com.cn/usstock/api/json_v2.php/US_MinKService.getDailyK?symbol=.NDX&datalen=200",
+    rtUrl: "https://hq.sinajs.cn/list=gb_ndx",
+    rtRef: "https://finance.sina.com.cn",
+    thresholds: { "轻度补仓": 10, "中度补仓": 20, "深度补仓": 30 },
+    parseHist: function(data) {
+      if (!Array.isArray(data) || !data.length) return [];
+      return data.map(function(d) { return { date: d.d, open: +d.o, high: +d.h, low: +d.l, close: +d.c }; });
+    },
+    parseRt: function(text) { var m=text.match(/="(.+)"/); return m ? +m[1].split(",")[1] : null; },
+  },
+  // --- 黄金GLD ---
+  {
+    name: "黄金(GLD)", code: "GLD", market: "gold",
+    histUrl: "https://stock.finance.sina.com.cn/usstock/api/json_v2.php/US_MinKService.getDailyK?symbol=GLD&datalen=200",
+    rtUrl: "https://hq.sinajs.cn/list=gb_gld",
+    rtRef: "https://finance.sina.com.cn",
+    thresholds: { "轻度补仓": 5, "中度补仓": 10, "深度补仓": 15 },
+    parseHist: function(data) {
+      if (!Array.isArray(data) || !data.length) return [];
+      return data.map(function(d) { return { date: d.d, open: +d.o, high: +d.h, low: +d.l, close: +d.c }; });
+    },
+    parseRt: function(text) { var m=text.match(/="(.+)"/); return m ? +m[1].split(",")[1] : null; },
+  },
+];
+
+// ============================================================
+// Fetch helpers
+// ============================================================
+function proxyUrl(url, ref) {
+  var u = PROXY + encodeURIComponent(url);
+  if (ref) u += "&ref=" + encodeURIComponent(ref);
+  return u;
+}
+
+async function fetchIndexData(idx) {
+  var histResp, rtResp;
+  try {
+    var results = await Promise.allSettled([
+      fetch(proxyUrl(idx.histUrl)),
+      fetch(proxyUrl(idx.rtUrl, idx.rtRef)),
+    ]);
+    histResp = results[0]; rtResp = results[1];
+  } catch (e) {
+    return { history: [], historyError: e.message, currentPrice: null, realtimeError: e.message };
+  }
+
+  var history = [];
+  var historyError = null;
+  if (histResp.status === "fulfilled") {
+    try {
+      var raw = await histResp.value.json();
+      history = idx.parseHist(raw);
+    } catch (e) { historyError = "历史数据解析失败: " + e.message; }
+  } else { historyError = "历史数据请求失败"; }
+
+  var currentPrice = null;
+  var realtimeError = null;
+  if (rtResp.status === "fulfilled") {
+    try {
+      var text = await rtResp.value.text();
+      currentPrice = idx.parseRt(text);
+    } catch (e) { realtimeError = "实时数据解析失败"; }
+  } else { realtimeError = "实时数据请求失败"; }
+
+  return { history: history, historyError: historyError, currentPrice: currentPrice, realtimeError: realtimeError };
+}
+
+// ============================================================
+// Analysis
+// ============================================================
+function analyze(history, currentPrice, thresholds, lookbackMonths) {
+  var result = {};
+  if (!history.length) { result.error = "无历史数据"; return result; }
+
+  var cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - lookbackMonths);
+  var cutoffStr = cutoff.toISOString().slice(0, 10);
+  var filtered = history.filter(function(d) { return d.date >= cutoffStr; });
+  if (filtered.length < 20) {
+    result.data_warning = "历史数据仅 " + filtered.length + " 个交易日，以实际数据计算";
+  }
+
+  var data = filtered.length > 0 ? filtered : history;
+  result.data_days = data.length;
+
+  var maxHigh = -Infinity, maxDate = "";
+  for (var i = 0; i < data.length; i++) {
+    if (data[i].high > maxHigh) { maxHigh = data[i].high; maxDate = data[i].date; }
+  }
+  result.high_6m = maxHigh;
+  result.high_date = maxDate;
+
+  if (currentPrice && currentPrice > 0) {
+    result.current_price = currentPrice;
+  } else {
+    result.current_price = data[data.length - 1].close;
+    result.price_note = "(使用最近收盘价)";
+  }
+  result.current_price = Math.round(result.current_price * 100) / 100;
+
+  if (data.length >= 2) {
+    result.prev_close = data[data.length - 2].close;
+    result.change_pct = Math.round((result.current_price - result.prev_close) / result.prev_close * 10000) / 100;
+  }
+
+  if (result.high_6m > 0) {
+    result.drawdown_pct = Math.round((result.high_6m - result.current_price) / result.high_6m * 10000) / 100;
+  } else { result.drawdown_pct = 0; }
+
+  result.triggered = [];
+  result.any_triggered = false;
+  var keys = Object.keys(thresholds);
+  for (var i = 0; i < keys.length; i++) {
+    var label = keys[i];
+    var th = thresholds[label];
+    var hit = result.drawdown_pct >= th;
+    if (hit) result.any_triggered = true;
+    result.triggered.push({
+      label: label, threshold: th, hit: hit,
+      target_price: result.high_6m > 0 ? Math.round(result.high_6m * (1 - th / 100) * 100) / 100 : null,
+    });
+  }
+
+  return result;
+}
+
+// ============================================================
+// Fetch all indices
+// ============================================================
+async function fetchAll() {
+  var results = [];
+  for (var i = 0; i < INDICES.length; i++) {
+    var idx = INDICES[i];
+    try {
+      var d = await fetchIndexData(idx);
+      if (d.historyError && !d.history.length) {
+        results.push({ name: idx.name, code: idx.code, market: idx.market, error: d.historyError });
+      } else {
+        var analysis = analyze(d.history, d.currentPrice, idx.thresholds, 6);
+        analysis.name = idx.name;
+        analysis.code = idx.code;
+        analysis.market = idx.market;
+        results.push(analysis);
+      }
+    } catch (e) {
+      results.push({ name: idx.name, code: idx.code, market: idx.market, error: e.message });
+    }
+  }
+  return results;
+}
+
+// ============================================================
+// Formatting
+// ============================================================
+function fmtPrice(v) {
+  if (v == null) return "—";
+  return v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtPct(v) {
+  if (v == null) return "—";
+  return (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+}
+function marketBadge(m) {
+  if (m === "a_share") return '<span class="market-badge badge-a">A股</span>';
+  if (m === "us") return '<span class="market-badge badge-us">美股</span>';
+  return '<span class="market-badge badge-gold">黄金</span>';
+}
+
+// ============================================================
+// Render
+// ============================================================
+function renderReport(results) {
+  var now = new Date();
+  document.getElementById("headerTime").textContent = "更新于 " + now.toLocaleString("zh-CN", { hour12: false });
+
+  // -- Section 1 --
+  var s1 = '<div class="section-title">一、今日数据与回撤计算</div>';
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    if (r.error) {
+      s1 += '<div class="card error-card"><div class="card-header"><span class="name">' + r.name + ' <span style="font-weight:400;font-size:12px;color:var(--text2)">' + r.code + '</span></span>' + marketBadge(r.market) + '</div><div class="metric-row"><span class="metric-value down">' + r.error + '</span></div></div>';
+      continue;
+    }
+
+    var ddClass = r.drawdown_pct >= 15 ? "dd-bar-hot" : (r.drawdown_pct >= 5 ? "dd-bar-warm" : "dd-bar-cold");
+
+    s1 += '<div class="card"><div class="card-header"><span class="name">' + r.name + ' <span style="font-weight:400;font-size:12px;color:var(--text2)">' + r.code + '</span></span>' + marketBadge(r.market) + '</div>';
+
+    if (r.data_warning) {
+      s1 += '<div style="font-size:11px;color:var(--gold);margin-bottom:8px">' + r.data_warning + '</div>';
+    }
+
+    s1 += '<div class="metric-row"><span class="metric-label">近6个月最高点</span><span class="metric-value">' + fmtPrice(r.high_6m) + '<span style="font-size:10px;color:var(--text2)"> (' + (r.high_date || "—") + ')</span></span></div>';
+    s1 += '<div class="metric-row"><span class="metric-label">当前净值</span><span class="metric-value">' + fmtPrice(r.current_price) + (r.price_note ? ' <span style="font-size:10px;color:var(--text2)">' + r.price_note + '</span>' : '') + '</span></div>';
+
+    if (r.change_pct != null) {
+      s1 += '<div class="metric-row"><span class="metric-label">较前日变化</span><span class="metric-value ' + (r.change_pct >= 0 ? 'up' : 'down') + '">' + fmtPct(r.change_pct) + '</span></div>';
+    }
+
+    s1 += '<div class="metric-row"><span class="metric-label">今日回撤幅度</span><span class="metric-value down">' + r.drawdown_pct.toFixed(2) + '%</span></div>';
+    s1 += '<div class="dd-bar-wrap"><div class="dd-bar ' + ddClass + '" style="width:' + Math.min(r.drawdown_pct, 50) * 2 + '%"></div></div>';
+    s1 += '<div class="threshold-checks">';
+
+    for (var j = 0; j < r.triggered.length; j++) {
+      var t = r.triggered[j];
+      s1 += '<span class="th-check' + (t.hit ? ' hit' : '') + '">' + t.label + ' >=' + t.threshold + '%' + (t.hit ? ' 触发' : '') + '</span>';
+    }
+    s1 += '</div></div>';
+  }
+  document.getElementById("section1").innerHTML = s1;
+
+  // -- Section 2 --
+  var allLabels = [];
+  for (var i = 0; i < INDICES.length; i++) {
+    var keys = Object.keys(INDICES[i].thresholds);
+    for (var j = 0; j < keys.length; j++) {
+      if (allLabels.indexOf(keys[j]) < 0) allLabels.push(keys[j]);
+    }
+  }
+
+  var s2 = '<div class="section-title">二、补仓决策汇总</div><div class="card" style="overflow-x:auto"><table class="summary-table">';
+  s2 += '<thead><tr><th>市场</th><th>当前回撤</th>';
+  for (var i = 0; i < allLabels.length; i++) { s2 += '<th>' + allLabels[i] + '</th>'; }
+  s2 += '<th>是否补仓</th></tr></thead><tbody>';
+
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    if (r.error) {
+      s2 += '<tr><td style="font-weight:500">' + r.name + '</td><td>N/A</td>';
+      for (var j = 0; j < allLabels.length; j++) s2 += '<td>—</td>';
+      s2 += '<td>—</td></tr>';
+      continue;
+    }
+
+    var trigMap = {};
+    for (var j = 0; j < r.triggered.length; j++) { trigMap[r.triggered[j].label] = r.triggered[j].hit; }
+
+    s2 += '<tr><td style="font-weight:500">' + r.name + '</td><td style="color:var(--red);font-weight:600">' + r.drawdown_pct.toFixed(2) + '%</td>';
+    for (var j = 0; j < allLabels.length; j++) {
+      s2 += '<td>' + (trigMap[allLabels[j]] ? '<span style="color:var(--red);font-weight:600">触发</span>' : '<span style="color:var(--text2)">—</span>') + '</td>';
+    }
+    var color = r.any_triggered ? 'var(--red)' : 'var(--green)';
+    s2 += '<td class="verdict" style="color:' + color + '">' + (r.any_triggered ? '是' : '否') + '</td></tr>';
+  }
+  s2 += '</tbody></table></div>';
+  document.getElementById("section2").innerHTML = s2;
+
+  // -- Section 3 --
+  var s3 = '<div class="section-title">三、操作建议</div><div class="card">';
+  var anyTrig = false;
+
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    if (r.error) continue;
+
+    var hitTriggers = [];
+    for (var j = 0; j < r.triggered.length; j++) {
+      if (r.triggered[j].hit) hitTriggers.push(r.triggered[j]);
+    }
+
+    if (hitTriggers.length) {
+      anyTrig = true;
+      s3 += '<div class="suggestion"><div class="title" style="color:var(--red)">' + r.name + ' — 建议补仓</div><div class="detail">';
+      for (var j = 0; j < hitTriggers.length; j++) {
+        var t = hitTriggers[j];
+        s3 += '已达 ' + t.label + ' 条件(>=' + t.threshold + '%)，当前回撤 ' + r.drawdown_pct.toFixed(2) + '%，对应点位约 ' + fmtPrice(t.target_price);
+        if (j < hitTriggers.length - 1) s3 += '<br>';
+      }
+      s3 += '</div></div>';
+    } else {
+      var nextT = null;
+      for (var j = 0; j < r.triggered.length; j++) {
+        var tr = r.triggered[j];
+        if (!tr.hit && tr.threshold > 0) { nextT = tr; break; }
+      }
+      s3 += '<div class="suggestion"><div class="title" style="color:var(--green)">' + r.name + ' — 观望</div>';
+      if (nextT) {
+        s3 += '<div class="detail">需回撤达 ' + nextT.threshold + '% 以上(约 ' + fmtPrice(nextT.target_price) + ' 点附近)触发 ' + nextT.label + '</div>';
+      }
+      s3 += '</div>';
+    }
+  }
+  s3 += '</div>';
+
+  var summary = anyTrig ? "按补仓计划执行加仓操作。" : "今天不用动，继续机械定投即可。";
+  s3 += '<div class="big-summary ' + (anyTrig ? 'alert' : 'safe') + '">一句话总结：' + summary + '</div>';
+
+  document.getElementById("section3").innerHTML = s3;
+}
+
+// ============================================================
+// Main
+// ============================================================
+var loading = false;
+
+async function refreshAll() {
+  if (loading) return;
+  loading = true;
+  var btn = document.getElementById("btnRefresh");
+  btn.disabled = true;
+  document.getElementById("btnIcon").innerHTML = '<span class="spinner"></span>';
+  document.getElementById("btnText").textContent = "正在获取数据...";
+
+  try {
+    var results = await fetchAll();
+    renderReport(results);
+  } catch (e) {
+    document.getElementById("section1").innerHTML = '<div class="card error-card"><span class="metric-value down">数据加载失败: ' + e.message + '</span></div>';
+  } finally {
+    loading = false;
+    btn.disabled = false;
+    document.getElementById("btnIcon").textContent = "刷新";
+    document.getElementById("btnText").textContent = "刷新数据";
+  }
+}
+
+refreshAll();
+</script>
+</body>
+</html>

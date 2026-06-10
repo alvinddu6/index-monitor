@@ -1,0 +1,50 @@
+{
+  "indices": [
+    {
+      "name": "沪深300",
+      "code": "000300",
+      "market": "a_share",
+      "data_source": "akshare",
+      "symbol": "sh000300",
+      "thresholds": {
+        "轻度补仓": 10,
+        "中度补仓": 20,
+        "深度补仓": 30
+      }
+    },
+    {
+      "name": "纳斯达克100",
+      "code": "NDX",
+      "market": "us",
+      "data_source": "yfinance",
+      "symbol": "^NDX",
+      "thresholds": {
+        "轻度补仓": 10,
+        "中度补仓": 20,
+        "深度补仓": 30
+      }
+    },
+    {
+      "name": "黄金9999",
+      "code": "Au99.99",
+      "market": "gold",
+      "data_source": "akshare_sge",
+      "symbol": "Au99.99",
+      "thresholds": {
+        "轻度补仓": 5,
+        "中度补仓": 10,
+        "深度补仓": 15
+      }
+    }
+  ],
+  "lookback_months": 6,
+  "output": {
+    "console": true,
+    "save_to_file": true,
+    "output_dir": "./reports"
+  },
+  "retry": {
+    "max_attempts": 3,
+    "delay_seconds": 5
+  }
+}
