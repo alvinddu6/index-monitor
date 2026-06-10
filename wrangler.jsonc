@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "index-monitor",
+  "compatibility_date": "2026-06-10",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "allin"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
